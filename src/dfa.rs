@@ -5,7 +5,7 @@ pub trait Automaton {
     type State;
     type Alphabet;
 
-    fn run(&self, Vec<Self::Alphabet>) -> bool;
+    fn run(&self, Vec<Self::Alphabet>) -> Option<Self::State>;
 }
 
 pub struct DFA<S = usize, I = char> {
@@ -24,15 +24,19 @@ impl<S, I> Automaton for DFA<S, I> where S: Hash + Eq + Copy, I: Hash + Eq + Cop
     type State = S;
     type Alphabet = I;
 
-    fn run(&self, s: Vec<I>) -> bool {
+    fn run(&self, s: Vec<I>) -> Option<S> {
         let mut cur_state = self.start;
         for c in s {
             match self.transitions.get(&(cur_state, c)) {
                 Some(s) => cur_state = *s,
-                None => return false
+                None => return None
             }
         }
-        self.accept_states.contains(&cur_state)
+        if self.accept_states.contains(&cur_state) {
+            Some(cur_state)
+        } else {
+            None
+        }
     }
 }
 
@@ -61,10 +65,10 @@ mod test {
     fn test_dfa() {
         let transitions = map!((0, 'a') => 0, (0, 'b') => 1, (1, 'a') => 0, (1, 'b') => 2);
         let dfa = DFA::new(1, set!(2), transitions);
-        assert_eq!(dfa.run("aaaaa".chars().collect()), false);
-        assert_eq!(dfa.run("aabaa".chars().collect()), false);
-        assert_eq!(dfa.run("aababbb".chars().collect()), false);
-        assert_eq!(dfa.run("aababb".chars().collect()), true);
-        assert_eq!(dfa.run("aabb".chars().collect()), true);
+        assert_eq!(dfa.run("aaaaa".chars().collect()), None);
+        assert_eq!(dfa.run("aabaa".chars().collect()), None);
+        assert_eq!(dfa.run("aababbb".chars().collect()), None);
+        assert_eq!(dfa.run("aababb".chars().collect()), Some(2));
+        assert_eq!(dfa.run("aabb".chars().collect()), Some(2));
     }
 }
