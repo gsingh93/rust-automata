@@ -1,12 +1,6 @@
+use Automaton;
 use std::collections::{HashSet, HashMap};
 use std::hash::Hash;
-
-pub trait Automaton {
-    type State;
-    type Alphabet;
-
-    fn run(&self, Vec<Self::Alphabet>) -> Option<Self::State>;
-}
 
 pub struct DFA<S = usize, I = char> {
     start: S,
@@ -42,7 +36,8 @@ impl<S, I> Automaton for DFA<S, I> where S: Hash + Eq + Copy, I: Hash + Eq + Cop
 
 #[cfg(test)]
 mod test {
-    use dfa::{DFA, Automaton};
+    use Automaton;
+    use dfa::DFA;
 
     macro_rules! set {
         ($($elem:expr),*) => ({
@@ -59,7 +54,6 @@ mod test {
             h
         })
     }
-
 
     #[test]
     fn test_dfa() {
