@@ -1,4 +1,7 @@
 use Automaton;
+use std::fmt::Display;
+use std::io::Write;
+use std::fs::OpenOptions;
 use std::collections::{HashSet, HashMap};
 use std::hash::Hash;
 
@@ -32,6 +35,22 @@ impl<S, I> Automaton for DFA<S, I> where S: Hash + Eq + Copy, I: Hash + Eq + Cop
             None
         }
     }
+
+    fn output_graphviz(&self, filename: &str) where S: Display, I: Display {
+        let mut options = OpenOptions::new();
+        let mut f = options.truncate(true).create(true).write(true).open(filename).unwrap();
+        write!(&mut f, "digraph nfa {{\n").unwrap();
+        write!(&mut f, "\tnode [shape = doublecircle]; ").unwrap();
+        for state in self.accept_states.iter() {
+            write!(&mut f, "{} ", state).unwrap();
+        }
+        write!(&mut f, ";\n").unwrap();
+        write!(&mut f, "\tnode [shape = circle];\n").unwrap();
+        for (trans, state) in self.transitions.iter() {
+            write!(&mut f, "\t{} -> {} [ label = \"{}\"]\n", trans.0, state, trans.1).unwrap();
+        }
+        write!(&mut f, "}}\n").unwrap();
+    }
 }
 
 #[cfg(test)]
@@ -64,5 +83,6 @@ mod test {
         assert_eq!(dfa.run("aababbb".chars().collect()), None);
         assert_eq!(dfa.run("aababb".chars().collect()), Some(2));
         assert_eq!(dfa.run("aabb".chars().collect()), Some(2));
+        dfa.output_graphviz("dfa.dot");
     }
 }
