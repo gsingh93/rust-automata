@@ -50,6 +50,13 @@ impl<S, I> Automaton for NFA<S, I> where S: Hash + Eq + Copy, I: Hash + Eq + Cop
                 Some(s) => s,
                 None => panic!("Shouldn't happen")
             };
+
+            if let Some(set) = self.transitions.get(&(state, Epsilon)) {
+                for item in set {
+                    queue.push_back((*item, pos))
+                }
+            }
+
             if pos == s.len() {
                 if self.accept_states.contains(&state) {
                     return Some(state)
@@ -60,12 +67,6 @@ impl<S, I> Automaton for NFA<S, I> where S: Hash + Eq + Copy, I: Hash + Eq + Cop
                         queue.push_back((*item, pos + 1))
                     }
                 }
-                if let Some(set) = self.transitions.get(&(state, Epsilon)) {
-                    for item in set {
-                        queue.push_back((*item, pos))
-                    }
-                }
-
             }
         }
         None
@@ -98,7 +99,7 @@ impl<S, I> Automaton for NFA<S, I> where S: Hash + Eq + Copy, I: Hash + Eq + Cop
 mod test {
     use Automaton;
     use nfa::NFA;
-    use nfa::Transition::{Input, Epsilon};
+    use nfa::Transition::Input;
 
     macro_rules! set {
         ($($elem:expr),*) => ({
