@@ -19,6 +19,46 @@ pub enum Transition<I> {
     Input(I)
 }
 
+pub struct NFAIter<'a, S: 'a, I: 'a> {
+    queue: VecDeque<(&'a S, usize)>,
+    input: Vec<I>,
+    transitions: &'a HashMap<(S, Transition<I>), HashSet<S>>
+}
+
+impl<'a, S: 'a + Hash + Eq + Copy, I: Hash + Eq + Copy> Iterator for NFAIter<'a, S, I> {
+    type Item = &'a S;
+
+    fn next(&mut self) -> Option<&'a S> {
+        if self.queue.is_empty() {
+            None
+        } else {
+            let (state, pos) = match self.queue.pop_front() {
+                Some(s) => s,
+                None => panic!("Shouldn't happen")
+            };
+
+            if pos < self.input.len() {
+                if let Some(set) = self.transitions.get(&(*state, Input(self.input[pos]))) {
+                    for item in set {
+                        self.queue.push_back((item, pos + 1))
+                    }
+                }
+            }
+            if let Some(set) = self.transitions.get(&(*state, Epsilon)) {
+                for item in set {
+                    self.queue.push_back((item, pos))
+                }
+            }
+
+            Some(state)
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>){
+        (0, None) // TODO
+    }
+}
+
 impl<S: Clone + Eq + Hash, I: Eq + Hash> NFA<S, I> {
     pub fn new(start: S, accept_states: HashSet<S>,
                transitions: HashMap<(S, Transition<I>), HashSet<S>>) -> NFA<S, I> {
@@ -35,6 +75,12 @@ impl<S: Clone + Eq + Hash, I: Eq + Hash> NFA<S, I> {
 
     pub fn get_transitions(&self) -> &HashMap<(S, Transition<I>), HashSet<S>> {
         &self.transitions
+    }
+
+    pub fn iter(&self, input: Vec<I>) -> NFAIter<S, I> {
+        let mut queue = VecDeque::new();
+        queue.push_back((&self.start, 0));
+        NFAIter { queue: queue, input: input, transitions: &self.transitions }
     }
 }
 
