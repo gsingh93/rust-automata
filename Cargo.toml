@@ -1,5 +1,8 @@
 [package]
 
 name = "automata"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["Gulshan Singh <gulshan@umich.edu>"]
+description = "An NFA and DFA implementation"
+license = "MIT"
+repository = "https://github.com/gsingh93/rust-automata"

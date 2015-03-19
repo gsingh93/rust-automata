@@ -1,5 +1,3 @@
-#![feature(io)]
-
 use std::fmt::Display;
 
 pub mod dfa;

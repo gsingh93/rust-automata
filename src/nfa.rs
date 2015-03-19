@@ -1,10 +1,18 @@
-use Automaton;
+use {Automaton, DFA};
 use std::fmt::Display;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::collections::{HashSet, HashMap, VecDeque};
 use std::hash::Hash;
 use nfa::Transition::{Input, Epsilon};
+
+macro_rules! set {
+    ($($elem:expr),*) => ({
+        let mut s = ::std::collections::HashSet::new();
+        $(s.insert($elem);)*
+        s
+    })
+}
 
 #[derive(Debug)]
 pub struct NFA<S: Eq + Hash = usize, I: Eq + Hash = char> {
@@ -59,7 +67,7 @@ impl<'a, S: 'a + Hash + Eq + Copy, I: Hash + Eq + Copy> Iterator for NFAIter<'a,
     }
 }
 
-impl<S: Clone + Eq + Hash, I: Eq + Hash> NFA<S, I> {
+impl<S: Clone + Eq + Hash, I: Eq + Hash + Copy> NFA<S, I> {
     pub fn new(start: S, accept_states: HashSet<S>,
                transitions: HashMap<(S, Transition<I>), HashSet<S>>) -> NFA<S, I> {
         NFA { start: start, accept_states: accept_states, transitions: transitions }
@@ -82,6 +90,81 @@ impl<S: Clone + Eq + Hash, I: Eq + Hash> NFA<S, I> {
         queue.push_back((&self.start, 0));
         NFAIter { queue: queue, input: input, transitions: &self.transitions }
     }
+
+    pub fn into_dfa(self) -> DFA<usize, I> {
+        let mut states = HashSet::new();
+        let mut alphabet = HashSet::new();
+        for (trans, state) in self.transitions.iter() {
+            states.insert(trans.0.clone());
+            states.extend(state.clone());
+
+            // Don't add epsilon
+            if let Input(c) = trans.1 {
+                alphabet.insert(c);
+            }
+        }
+
+        let mut accept_states = HashSet::new();
+        let mut transitions = HashMap::new();
+        let mut id = 0;
+        let mut get_id = || { let ret = id; id += 1; ret };
+        let mut init_state = set!(self.start.clone());
+        let mut queue = VecDeque::new();
+        self.epsilon_closure(&mut init_state);
+        queue.push_back((get_id(), init_state));
+        while let Some((cur_id, cur_state)) = queue.pop_front() {
+            for a in alphabet.iter() {
+                let mut new_state = self.reachable_states(&cur_state, Input(*a));
+                self.epsilon_closure(&mut new_state);
+
+                let id = get_id();
+                if self.contains_accept(&new_state) {
+                    accept_states.insert(id);
+                }
+                queue.push_back((id, new_state));
+                transitions.insert((cur_id, *a), id);
+            }
+        }
+        DFA::new(0, accept_states, transitions)
+    }
+
+    fn contains_accept(&self, states: &HashSet<S>) -> bool {
+        let (set, other) = if states.len() < self.accept_states.len() {
+            (states, &self.accept_states) }
+        else {
+            (&self.accept_states, states)
+        };
+
+        for s in set {
+            if other.contains(&s) {
+                return true
+            }
+        }
+        false
+    }
+
+    fn reachable_states(&self, states: &HashSet<S>, input: Transition<I>) -> HashSet<S> {
+        let mut reachable_states = HashSet::new();
+        for s in states {
+            if let Some(next_states) = self.transitions.get(&(s.clone(), input)) {
+                for ns in next_states {
+                    reachable_states.insert(ns.clone());
+                }
+            }
+        }
+        reachable_states
+    }
+
+    fn epsilon_closure(&self, states: &mut HashSet<S>) {
+        loop {
+            let new_states = self.reachable_states(states, Epsilon);
+            let old_len = states.len();
+            states.extend(new_states);
+            if old_len == states.len() {
+                break;
+            }
+        }
+    }
 }
 
 impl<S, I> Automaton for NFA<S, I> where S: Hash + Eq + Copy, I: Hash + Eq + Copy {
@@ -91,12 +174,7 @@ impl<S, I> Automaton for NFA<S, I> where S: Hash + Eq + Copy, I: Hash + Eq + Cop
     fn run(&self, s: Vec<I>) -> Option<S> {
         let mut queue = VecDeque::new();
         queue.push_back((self.start, 0));
-        while !queue.is_empty() {
-            let (state, pos) = match queue.pop_front() {
-                Some(s) => s,
-                None => panic!("Shouldn't happen")
-            };
-
+        while let Some((state, pos)) = queue.pop_front() {
             if let Some(set) = self.transitions.get(&(state, Epsilon)) {
                 for item in set {
                     queue.push_back((*item, pos))
