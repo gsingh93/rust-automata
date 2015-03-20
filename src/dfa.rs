@@ -15,6 +15,18 @@ impl<S: Eq + Hash, I: Eq + Hash> DFA<S, I> {
     pub fn new(start: S, accept_states: HashSet<S>, transitions: HashMap<(S, I), S>) -> DFA<S, I> {
         DFA { start: start, accept_states: accept_states, transitions: transitions }
     }
+
+    pub fn get_accept_states(&self) -> &HashSet<S> {
+        &self.accept_states
+    }
+
+    pub fn get_start_state(&self) -> &S {
+        &self.start
+    }
+
+    pub fn get_transitions(&self) -> &HashMap<(S, I), S> {
+        &self.transitions
+    }
 }
 
 pub struct DFAIter<'a, S: 'a, I: 'a> {

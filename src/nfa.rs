@@ -15,6 +15,7 @@ macro_rules! set {
     })
 }
 
+#[derive(Debug, Clone)]
 pub struct NFA<S: Eq + Hash = usize, I: Eq + Hash = char> {
     start: S,
     accept_states: HashSet<S>,
@@ -91,7 +92,8 @@ impl<S: Clone + Eq + Hash, I: Eq + Hash + Copy> NFA<S, I> {
         NFAIter { queue: queue, input: input, transitions: &self.transitions }
     }
 
-    pub fn into_dfa(self) -> DFA<usize, I> where S: Ord {
+    pub fn into_dfa<T: Clone>(self, tok_map: &HashMap<S, T>) -> (DFA<usize, I>,
+                                                                 HashMap<usize, T>) where S: Ord {
         let mut alphabet = HashSet::new();
         for (trans, _) in self.transitions.iter() {
             // Don't add epsilon
@@ -100,6 +102,7 @@ impl<S: Clone + Eq + Hash, I: Eq + Hash + Copy> NFA<S, I> {
             }
         }
 
+        let mut new_tok_map = HashMap::new();
         let mut states = HashMap::new();
         let mut accept_states = HashSet::new();
         let mut transitions = HashMap::new();
@@ -120,7 +123,8 @@ impl<S: Clone + Eq + Hash, I: Eq + Hash + Copy> NFA<S, I> {
                 if new_state.len() > 0 {
                     if let Vacant(entry) = states.entry(new_state_set.clone()) {
                         let id = get_id();
-                        if self.contains_accept(&new_state) {
+                        if let Some(s) = self.get_accept(&new_state) {
+                            new_tok_map.insert(id, tok_map.get(&s).unwrap().clone());
                             accept_states.insert(id);
                         }
                         queue.push_back((id, new_state));
@@ -132,10 +136,10 @@ impl<S: Clone + Eq + Hash, I: Eq + Hash + Copy> NFA<S, I> {
                 }
             }
         }
-        DFA::new(0, accept_states, transitions)
+        (DFA::new(0, accept_states, transitions), new_tok_map)
     }
 
-    fn contains_accept(&self, states: &HashSet<S>) -> bool {
+    fn get_accept(&self, states: &HashSet<S>) -> Option<S> {
         let (set, other) = if states.len() < self.accept_states.len() {
             (states, &self.accept_states) }
         else {
@@ -144,10 +148,10 @@ impl<S: Clone + Eq + Hash, I: Eq + Hash + Copy> NFA<S, I> {
 
         for s in set {
             if other.contains(&s) {
-                return true
+                return Some(s.clone())
             }
         }
-        false
+        None
     }
 
     fn reachable_states(&self, states: &HashSet<S>, input: Transition<I>) -> HashSet<S> {
