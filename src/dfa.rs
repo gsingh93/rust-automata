@@ -5,13 +5,13 @@ use std::fs::OpenOptions;
 use std::collections::{HashSet, HashMap};
 use std::hash::Hash;
 
-pub struct DFA<S = usize, I = char> {
+pub struct DFA<S: Eq + PartialEq + Hash = usize, I: Eq + PartialEq + Hash = char> {
     start: S,
     accept_states: HashSet<S>,
     transitions: HashMap<(S, I), S>
 }
 
-impl<S, I> DFA<S, I> {
+impl<S: Eq + Hash, I: Eq + Hash> DFA<S, I> {
     pub fn new(start: S, accept_states: HashSet<S>, transitions: HashMap<(S, I), S>) -> DFA<S, I> {
         DFA { start: start, accept_states: accept_states, transitions: transitions }
     }
@@ -60,11 +60,10 @@ impl<'a, S: 'a + Hash + Eq + Copy, I: Hash + Eq + Copy> Iterator for DFAIter<'a,
     }
 }
 
-impl<S, I> DFA<S, I> {
+impl<S: Eq + Hash, I: Eq + Hash> DFA<S, I> {
     pub fn iter(&self, input: Vec<I>) -> DFAIter<S, I> {
         DFAIter { input: input, transitions: &self.transitions, cur_state: &self.start, pos: 0 }
     }
-
 }
 
 impl<S, I> Automaton for DFA<S, I> where S: Hash + Eq + Copy, I: Hash + Eq + Copy {

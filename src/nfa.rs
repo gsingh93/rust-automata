@@ -2,7 +2,8 @@ use {Automaton, DFA};
 use std::fmt::Display;
 use std::fs::OpenOptions;
 use std::io::Write;
-use std::collections::{HashSet, HashMap, VecDeque};
+use std::collections::hash_map::Entry::Vacant;
+use std::collections::{HashSet, HashMap, VecDeque, BTreeSet};
 use std::hash::Hash;
 use nfa::Transition::{Input, Epsilon};
 
@@ -14,7 +15,6 @@ macro_rules! set {
     })
 }
 
-#[derive(Debug)]
 pub struct NFA<S: Eq + Hash = usize, I: Eq + Hash = char> {
     start: S,
     accept_states: HashSet<S>,
@@ -91,38 +91,45 @@ impl<S: Clone + Eq + Hash, I: Eq + Hash + Copy> NFA<S, I> {
         NFAIter { queue: queue, input: input, transitions: &self.transitions }
     }
 
-    pub fn into_dfa(self) -> DFA<usize, I> {
-        let mut states = HashSet::new();
+    pub fn into_dfa(self) -> DFA<usize, I> where S: Ord {
         let mut alphabet = HashSet::new();
-        for (trans, state) in self.transitions.iter() {
-            states.insert(trans.0.clone());
-            states.extend(state.clone());
-
+        for (trans, _) in self.transitions.iter() {
             // Don't add epsilon
             if let Input(c) = trans.1 {
                 alphabet.insert(c);
             }
         }
 
+        let mut states = HashMap::new();
         let mut accept_states = HashSet::new();
         let mut transitions = HashMap::new();
         let mut id = 0;
         let mut get_id = || { let ret = id; id += 1; ret };
-        let mut init_state = set!(self.start.clone());
         let mut queue = VecDeque::new();
+
+        let mut init_state = set!(self.start.clone());
         self.epsilon_closure(&mut init_state);
-        queue.push_back((get_id(), init_state));
+        queue.push_back((get_id(), init_state.clone()));
+        states.insert(init_state.into_iter().collect(), 0);
         while let Some((cur_id, cur_state)) = queue.pop_front() {
             for a in alphabet.iter() {
                 let mut new_state = self.reachable_states(&cur_state, Input(*a));
                 self.epsilon_closure(&mut new_state);
 
-                let id = get_id();
-                if self.contains_accept(&new_state) {
-                    accept_states.insert(id);
+                let new_state_set: BTreeSet<_> = new_state.clone().into_iter().collect();
+                if new_state.len() > 0 {
+                    if let Vacant(entry) = states.entry(new_state_set.clone()) {
+                        let id = get_id();
+                        if self.contains_accept(&new_state) {
+                            accept_states.insert(id);
+                        }
+                        queue.push_back((id, new_state));
+                        entry.insert(id);
+                    }
+                    // TODO: Find a way to not requery
+                    let id = states.get(&new_state_set).unwrap();
+                    transitions.insert((cur_id, *a), *id);
                 }
-                queue.push_back((id, new_state));
-                transitions.insert((cur_id, *a), id);
             }
         }
         DFA::new(0, accept_states, transitions)
@@ -221,9 +228,9 @@ impl<S, I> Automaton for NFA<S, I> where S: Hash + Eq + Copy, I: Hash + Eq + Cop
 
 #[cfg(test)]
 mod test {
-    use Automaton;
-    use nfa::NFA;
+    use {Automaton, NFA};
     use nfa::Transition::Input;
+    use std::collections::HashSet;
 
     macro_rules! set {
         ($($elem:expr),*) => ({
@@ -247,11 +254,82 @@ mod test {
                                (0, Input('b')) => set!(1),
                                (1, Input('a')) => set!(0, 1),
                                (1, Input('b')) => set!(2));
-        let nfa = NFA::new(1, set!(2), transitions);
+        let nfa = NFA::new(0, set!(2), transitions);
         assert_eq!(nfa.run("aaaaa".chars().collect()), None);
         assert_eq!(nfa.run("aabaa".chars().collect()), None);
         assert_eq!(nfa.run("aababbb".chars().collect()), None);
         assert_eq!(nfa.run("aababb".chars().collect()), Some(2));
         assert_eq!(nfa.run("aabb".chars().collect()), Some(2));
+    }
+
+    #[ignore] // We need to check for isomorphism, not equality
+    #[test]
+    fn test_into_dfa() {
+        // let transitions = map!((0, Input('a')) => set!(0, 1),
+        //                        (0, Input('b')) => set!(1),
+        //                        (1, Input('a')) => set!(0, 1),
+        //                        (1, Input('b')) => set!(2));
+        // let nfa = NFA::new(0, set!(2), transitions);
+        // let dfa1 = nfa.into_dfa();
+
+        // let transitions = map!((0, 'a') => 1,
+        //                        (0, 'b') => 2,
+        //                        (1, 'a') => 1,
+        //                        (1, 'b') => 3,
+        //                        (2, 'a') => 1,
+        //                        (2, 'b') => 4,
+        //                        (3, 'a') => 1,
+        //                        (3, 'b') => 4);
+        // let dfa2 = DFA::new(0, set!(3, 4), transitions);
+        // assert_eq!(dfa1, dfa2)
+    }
+
+    #[test]
+    fn test_reachable() {
+        let transitions = map!((0, Input('a')) => set!(0, 1),
+                               (0, Input('b')) => set!(1),
+                               (1, Input('a')) => set!(0, 1),
+                               (1, Input('b')) => set!(2));
+        let nfa = NFA::new(0, set!(2), transitions);
+        let s = nfa.reachable_states(&set!(0), Input('a'));
+
+        assert_eq!(s, set!(0, 1));
+
+        let s = nfa.reachable_states(&set!(0), Input('b'));
+        assert_eq!(s, set!(1));
+
+        let s = nfa.reachable_states(&set!(1), Input('a'));
+        assert_eq!(s, set!(0, 1));
+
+        let s = nfa.reachable_states(&set!(1), Input('b'));
+        assert_eq!(s, set!(2));
+
+        let s = nfa.reachable_states(&set!(2), Input('a'));
+        assert_eq!(s, HashSet::new());
+
+        let s = nfa.reachable_states(&set!(2), Input('b'));
+        assert_eq!(s, HashSet::new());
+
+    }
+
+    #[test]
+    fn test_epsilon_closure() {
+        let transitions = map!((0, Input('a')) => set!(0, 1),
+                               (0, Input('b')) => set!(1),
+                               (1, Input('a')) => set!(0, 1),
+                               (1, Input('b')) => set!(2));
+        let nfa = NFA::new(1, set!(2), transitions);
+
+        let mut s = set!(0);
+        nfa.epsilon_closure(&mut s);
+        assert_eq!(s, set!(0));
+
+        let mut s = set!(1);
+        nfa.epsilon_closure(&mut s);
+        assert_eq!(s, set!(1));
+
+        let mut s = set!(2);
+        nfa.epsilon_closure(&mut s);
+        assert_eq!(s, set!(2));
     }
 }

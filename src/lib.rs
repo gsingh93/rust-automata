@@ -1,3 +1,5 @@
+#![feature(std_misc)]
+
 use std::fmt::Display;
 
 pub mod dfa;
